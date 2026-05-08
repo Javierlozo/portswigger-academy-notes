@@ -1,21 +1,15 @@
 # Server-side topics
 
-PortSwigger Academy's server-side track. The biggest single section and where most of the labs live.
+PortSwigger Academy's server-side learning path. The biggest single section and where most of the labs live.
 
-## Notes
+## In course flow order
 
-- [Authentication](./authentication.md) — brute force, username enumeration, smart password guessing
-- [Access Control](./access-control.md) — vertical/horizontal privesc, IDOR, parameter tampering
-- [Path Traversal](./path-traversal.md) — `../` payloads and bypass tricks
+1. [Path Traversal](./path-traversal.md) ✓
+2. [Access Control](./access-control.md) ✓
+3. [Authentication](./authentication.md) — 8 of 10 labs done
+4. SSRF (Server-Side Request Forgery) — *coming up*
+5. File Upload Vulnerabilities — *coming up*
+6. OS Command Injection — *coming up*
+7. SQL Injection — *coming up*
 
-## Coming up
-
-- SQL Injection
-- Command Injection
-- Business Logic Vulnerabilities
-- Information Disclosure
-- File Upload Vulnerabilities
-- SSRF (Server-Side Request Forgery)
-- XXE (XML External Entity)
-
-I add a file per topic as I work through it.
+I add a file per topic in this order as I work through them.
