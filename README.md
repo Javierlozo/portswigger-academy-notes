@@ -4,25 +4,67 @@ My notes from working through the [PortSwigger Web Security Academy](https://por
 
 I'm taking these as I go. Plain markdown, my own words. Public so other learners can use them and so my prep is dated.
 
-— Luis Javier Lozoya · [luislozoya.com](https://www.luislozoya.com) · [github.com/Javierlozo](https://github.com/Javierlozo)
+— Luis Javier Lozoya · [luislozoya.com/notes](https://www.luislozoya.com/notes) · [github.com/Javierlozo](https://github.com/Javierlozo)
+
+> **Currently studying:** Server-side topics (Authentication — 8 of 10 labs)
+> **Apprentice progress:** 8 of 61 labs
+> **Last updated:** May 8, 2026
+
+## Progress
+
+### Server-side topics (course flow order)
+- [x] [Path Traversal](./server-side/path-traversal.md)
+- [x] [Access Control](./server-side/access-control.md)
+- [x] [Authentication](./server-side/authentication.md) — in progress, 8 of 10 labs
+- [ ] SSRF (Server-Side Request Forgery)
+- [ ] File Upload Vulnerabilities
+- [ ] OS Command Injection
+- [ ] SQL Injection
+
+### Client-side topics
+- [ ] XSS (reflected, stored, DOM-based)
+- [ ] CSRF
+- [ ] CORS
+- [ ] Clickjacking
+- [ ] DOM-based vulnerabilities
+- [ ] WebSockets
+
+### Advanced topics
+- [ ] Insecure Deserialization
+- [ ] JWT Attacks
+- [ ] OAuth Authentication
+- [ ] Prototype Pollution
+- [ ] HTTP Host Header Attacks
+- [ ] HTTP Request Smuggling
+- [ ] GraphQL API
+- [ ] Race Conditions
+- [ ] NoSQL Injection
+- [ ] API Testing
+- [ ] Web Cache Poisoning / Deception
+- [ ] Web LLM Attacks
+
+### BSCP Exam Prep
+- [ ] First Practitioner lab
+- [ ] First Expert lab
+- [ ] Practice exam
+- [ ] BSCP exam
+
+### Lab Writeups
+- [ ] First writeup coming after I solve one
 
 ## Sections
 
 ```
-server-side/      SQLi, auth, path traversal, command inj, BAC, file upload, SSRF, XXE, info disclosure, business logic
+server-side/      SQLi, auth, path traversal, command inj, BAC, file upload, SSRF, XXE
 client-side/      XSS, CSRF, CORS, clickjacking, DOM-based, WebSockets
-advanced/         Insecure deserialization, JWT, OAuth, prototype pollution, host header, request smuggling, GraphQL, race conditions, NoSQL, API testing, cache attacks, web LLM
-bscp-prep/        Cert-specific notes once I hit Practitioner level
-lab-writeups/     Individual lab walkthroughs
+advanced/         Deserialization, JWT, OAuth, prototype pollution, host header,
+                  request smuggling, GraphQL, race conditions, NoSQL, API testing,
+                  cache attacks, web LLM
+bscp-prep/        Cert-specific (mostly empty until I hit Practitioner)
+lab-writeups/     Per-lab walkthroughs
 ```
 
 Each folder has a README that lists what's inside.
-
-## Where I am
-
-Right now: Apprentice level. Working through the server-side topics path.
-
-I'll update the README as I make progress. Lab writeups go in `lab-writeups/` with one file per lab.
 
 ## Ground rules
 

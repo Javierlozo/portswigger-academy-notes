@@ -1,6 +1,25 @@
 # Access Control
 
-> PortSwigger topic: https://portswigger.net/web-security/access-control
+> **PortSwigger topic:** https://portswigger.net/web-security/access-control
+
+## Cheat sheet
+
+Auth says who you are. Access control says what you can do. The latter is where bugs hide.
+
+**Three flavors:**
+
+- Vertical privesc — user reaches admin functionality
+- Horizontal privesc — user A reaches user B's data (this is IDOR)
+- Horizontal → vertical — IDOR onto an admin account, game over
+
+**Try these first:**
+
+- Forced browse: `/admin`, `/admin-panel`, `/manage`, `/dashboard`
+- ID swap: `?id=123` → `?id=456`, `/users/1` → `/users/2`
+- Cookie / hidden field tamper: `role=user` → `role=admin`, `admin=false` → `admin=true`
+- Check `robots.txt` and JS bundles for "secret" admin URLs
+
+**In Burp:** swap a low-priv cookie into an admin request in Repeater. Use the [Autorize](https://portswigger.net/bappstore/f9bbac8c4acf4aefa4d7dc92a991af2f) extension for IDOR sweeps across every request.
 
 ## My version
 

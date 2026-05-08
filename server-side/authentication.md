@@ -1,6 +1,26 @@
 # Authentication
 
-> PortSwigger topic: https://portswigger.net/web-security/authentication
+> **PortSwigger topic:** https://portswigger.net/web-security/authentication
+
+## Cheat sheet
+
+Most auth bugs aren't crypto. They're brute force, enumeration, and flow logic gaps.
+
+**Try these first:**
+
+- Brute force usernames: `admin`, `administrator`, `firstname.lastname@<company>`, SecLists `xato-net-10-million-usernames.txt`
+- Brute force passwords: `rockyou.txt`, `Password1!`, `<Companyname>2024!`, season + year
+- Username enumeration: compare login error messages, response time, content length between known-bad and unknown user
+- Forgot-password and mobile API endpoints — often have weaker rate limits than the main login
+- 2FA bypass: response tampering on the verify call, token reuse, race conditions, fall-back to backup codes
+
+**Burp flow:**
+
+1. Capture login in Proxy
+2. Send to Intruder
+3. Mark username + password as payload positions
+4. SecLists wordlists for both
+5. Sort the result table by response length or status code; outliers are hits
 
 ## My version
 
