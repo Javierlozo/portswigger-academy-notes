@@ -131,6 +131,20 @@ In Burp: log in as low-priv, grab the session cookie, then swap it into a known 
 
 ## Labs
 
+### Lab: Unprotected admin functionality
+
+**Apprentice · Solved**
+
+[PortSwigger lab](https://portswigger.net/web-security/access-control/lab-unprotected-admin-functionality)
+
+Goal: find the admin panel and delete `carlos`.
+
+1. Appended `/robots.txt` to the lab URL.
+2. Saw a `Disallow:` entry pointing at `/administrator-panel`.
+3. Loaded `/administrator-panel` directly and deleted `carlos`.
+
+Takeaway: the textbook "Unprotected functionality" case. `robots.txt` is the first place to look for "secret" admin URLs because devs use it to keep the panel out of search results, not realizing that publishes the path to anyone who reads the file. Always check `/robots.txt`, `/sitemap.xml`, and `/.well-known/security.txt` on any new target.
+
 ### Lab: Unprotected admin functionality with unpredictable URL
 
 **Apprentice · Solved**
