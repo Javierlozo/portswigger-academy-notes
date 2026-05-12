@@ -131,4 +131,62 @@ In Burp: log in as low-priv, grab the session cookie, then swap it into a known 
 
 ## Labs
 
-No writeups yet.
+### Lab: Unprotected admin functionality with unpredictable URL
+
+**Apprentice · Solved**
+
+[PortSwigger lab](https://portswigger.net/web-security/access-control/lab-unprotected-admin-functionality-with-unpredictable-url)
+
+Goal: find the admin panel and delete `carlos`.
+
+1. Viewed the home page source in the browser dev tools.
+2. Spotted a JavaScript snippet that hardcoded the admin panel URL inside an `if (isAdmin)` branch (the script runs for everyone, regardless of role).
+3. Loaded the disclosed URL and used the panel to delete `carlos`.
+
+Takeaway: textbook "security through obscurity" failure under the Unprotected Functionality section above. Hard-to-guess URLs leak via client-side code that renders for all users.
+
+### Lab: User role controlled by request parameter
+
+**Apprentice · Solved**
+
+[PortSwigger lab](https://portswigger.net/web-security/access-control/lab-user-role-controlled-by-request-parameter)
+
+Goal: access `/admin` and delete `carlos` using the supplied `wiener:peter` account.
+
+1. Browsed `/admin` first as `wiener` and got blocked.
+2. In Burp Proxy, enabled response interception.
+3. Logged in normally and watched the login response. It set `Admin=false` as a cookie.
+4. Changed it to `Admin=true` and forwarded.
+5. `/admin` loaded; deleted `carlos`.
+
+Takeaway: textbook "Parameter-based access control" bug. The role decision lived in a cookie the client could trivially edit. Server trusted the cookie value as the source of truth instead of looking up the user's actual role from the session.
+
+### Lab: User ID controlled by request parameter, with unpredictable user IDs
+
+**Apprentice · Solved**
+
+[PortSwigger lab](https://portswigger.net/web-security/access-control/lab-user-id-controlled-by-request-parameter-with-unpredictable-user-ids)
+
+Goal: find Carlos's API key when his user ID is a GUID (not a sequential integer).
+
+1. Found a blog post authored by `carlos` and clicked his name. The author URL contained his GUID.
+2. Logged in as `wiener:peter` and went to `/my-account?id=<my-guid>`.
+3. Swapped my GUID for Carlos's GUID. Page returned Carlos's account details, including the API key.
+4. Submitted the key to solve.
+
+Takeaway: GUIDs don't stop horizontal escalation when the GUID is leaked elsewhere in the app. Author bylines, profile links, mention URLs are all common leaks. "Unguessable" is not the same as "unauthorized."
+
+### Lab: User ID controlled by request parameter with password disclosure
+
+**Apprentice · Solved**
+
+[PortSwigger lab](https://portswigger.net/web-security/access-control/lab-user-id-controlled-by-request-parameter-with-password-disclosure)
+
+Goal: get the administrator's password and use it to delete `carlos`.
+
+1. Logged in as `wiener:peter` and went to the account page. Saw the form prefilled the current user's password in a masked input.
+2. Changed `id=wiener` to `id=administrator` in the URL.
+3. Inspected the response in Burp. The masked field's `value` attribute contained the administrator's plaintext password.
+4. Logged in as administrator and deleted `carlos`.
+
+Takeaway: textbook "horizontal becomes vertical" chain. A horizontal IDOR plus a password being echoed back in the response equals admin compromise. Lesson: never round-trip secrets to the client, even masked, and never accept the user ID from the URL.
