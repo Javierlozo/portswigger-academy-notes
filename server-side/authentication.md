@@ -2,83 +2,207 @@
 
 > **PortSwigger topic:** https://portswigger.net/web-security/authentication
 
-## Cheat sheet
+## What is authentication?
 
-Most auth bugs aren't crypto. They're brute force, enumeration, and flow logic gaps.
+Verifying who someone is. Authentication mechanisms rely on one or more of three factors:
 
-**Try these first:**
+- **Knowledge** (something you know): passwords, PINs, security questions.
+- **Possession** (something you have): physical tokens, phones, hardware keys.
+- **Inherence** (something you are): biometrics — fingerprint, face, voice.
 
-- Brute force usernames: `admin`, `administrator`, `firstname.lastname@<company>`, SecLists `xato-net-10-million-usernames.txt`
-- Brute force passwords: `rockyou.txt`, `Password1!`, `<Companyname>2024!`, season + year
-- Username enumeration: compare login error messages, response time, content length between known-bad and unknown user
-- Forgot-password and mobile API endpoints — often have weaker rate limits than the main login
-- 2FA bypass: response tampering on the verify call, token reuse, race conditions, fall-back to backup codes
+Single-factor systems use one. MFA combines two or more.
 
-**Burp flow:**
+## Authentication vs authorization
 
-1. Capture login in Proxy
-2. Send to Intruder
-3. Mark username + password as payload positions
-4. SecLists wordlists for both
-5. Sort the result table by response length or status code; outliers are hits
+- **Authentication:** verifying you are who you claim to be (logging in as `Carlos123`).
+- **Authorization:** deciding what you're allowed to do once authenticated (can `Carlos123` delete other users?).
 
-## My version
+Auth gets the foothold. Authorization gates the impact.
 
-Authentication is verifying who someone is. Separate from authorization (what they can do). Most auth bugs aren't crypto bugs. They're brute force, enumeration, or flow logic gaps.
+## How authentication vulnerabilities arise
 
-## What to look for
+Two root causes cover almost everything:
+
+- **Weak protection mechanisms** that fail under direct attack (no rate limit, predictable passwords, guessable usernames).
+- **Logic flaws and poor coding** in the auth flow ("broken authentication") that let an attacker skip steps or bypass the mechanism entirely.
+
+## Impact
+
+Auth bugs are critical because once auth breaks, every authorization check downstream is operating on the wrong identity. Worst case: full app control via a compromised admin account. Even non-admin compromise exposes whatever data and functionality the victim could access.
+
+## Vulnerabilities in password-based login
+
+### Brute-forcing usernames
+
+Usernames are easy to guess when they follow a pattern. Common ones:
+
+- `admin`, `administrator`, `root`, `test`, `demo`
+- `firstname.lastname@<company>` (the universal corporate format)
+- Email addresses leaked by the app itself (profile pages, comment authors, "user not found" responses)
+
+During recon, I check whether the app discloses usernames anywhere accessible without login.
+
+### Brute-forcing passwords
+
+Smart guessing beats random brute force. Patterns I try first:
+
+- `Companyname2024!`, `Welcome1!`, `Password1!`
+- Season + year: `Spring2024!`
+- `<firstname>123` for personal accounts
+- Reused passwords from breaches matched against the email (HaveIBeenPwned)
+
+When a policy forces resets, users iterate predictably: `Mypassword1!` becomes `Mypassword2!`.
+
+### Username enumeration
+
+When the app reveals whether a username exists by responding differently. Three places it usually leaks:
+
+- **Login:** "incorrect password" vs "user not found"
+- **Registration:** "username already taken"
+- **Forgot password:** "email sent" vs "no account with that email"
+
+Even when the visible error text is identical, response time, status code, or content length can leak the same info. Sort Intruder results by Length and Status to spot the outlier.
+
+### Flawed brute-force protection
+
+Two main mechanisms apps use, both with common holes:
+
+- **Account locking:** the app locks the account after N failed attempts. Bypass by spreading attempts across many accounts (one attempt per account, cycle through them) so no single account hits the threshold. Combine with username enumeration first.
+- **User rate limiting:** limits the number of login attempts in a time window per user or per IP. Bypassable when the limit only applies to the visible login form (mobile API, legacy `/api/v1/login`, or `/forgot-password` may not enforce it), or when the IP can be spoofed via headers the app trusts (`X-Forwarded-For`).
+
+### HTTP basic authentication
+
+Browser sends `Authorization: Basic <base64(user:pass)>` on every request. Common problems:
+
+- Credentials sent on every request, often over HTTP without TLS, exposed to network attackers.
+- Credentials stay valid for the whole session and ignore logout.
+- Easy to brute force via the same Intruder flow as form-based login.
+- Often used on internal admin panels where dev assumes "no one will find this."
+
+## Vulnerabilities in MFA
+
+### Bypassing 2FA via flawed logic
+
+The app sends the verification code, then trusts a request that says "I'm verified" without checking the code. Test by:
+
+1. Logging in with valid credentials.
+2. Skipping straight to a post-2FA page (e.g. `/account`) before submitting the code.
+
+Some apps will let you in because they only check that you've started the 2FA flow, not finished it.
+
+### Brute-forcing 2FA codes
+
+Codes are usually 4 to 6 digits (10,000 to 1,000,000 possibilities). If there's no rate limit on the verification endpoint, brute force solves it. Watch for:
+
+- No lockout after N wrong codes
+- Code valid for too long (15+ minutes)
+- Same code reissued if the user requests another (predictable codes)
+
+### Bypassing 2FA entirely
+
+Sometimes the second factor is implemented as a separate, optional step rather than a hard gate. If you can reach authenticated functionality without going through the 2FA challenge at all, that's a full bypass.
+
+## Other authentication mechanisms
+
+### Keeping users logged in
+
+Persistent login tokens ("Remember me"). Common bugs:
+
+- Token is the user's ID encoded (base64, easy to forge for other users)
+- Token is `username:password` encoded
+- Token doesn't get invalidated on logout
+- Token doesn't get invalidated on password change
+
+If the cookie value looks like data instead of a random string, decode it.
+
+### Resetting user passwords
+
+Two main bug families:
+
+- **Predictable reset tokens:** the reset link contains a token that looks random but isn't (sequential, timestamp-based, or hash of guessable input). Generate a token for an account I control, look at its structure, then predict the target's token.
+- **Password reset poisoning:** the reset link is constructed from the `Host` header in the request. If the app trusts the header, an attacker overrides it:
+  ```
+  POST /forgot-password
+  Host: attacker.com
+
+  email=victim@target.com
+  ```
+  The reset email lands in the victim's inbox with a link to `https://attacker.com/reset?token=...`. When the victim clicks it, the token leaks to the attacker, who uses it on the real domain.
+
+### Changing user passwords
+
+The change-password form is sometimes weaker than the login form:
+
+- Doesn't verify the current password before accepting the new one
+- Uses a reset token that was never invalidated after first use
+- Accepts the username from a hidden field, letting an attacker change someone else's password if they know the username
+
+## Third-party authentication (OAuth)
+
+OAuth lets a user log in via a provider (Google, GitHub, Facebook). Common implementation flaws:
+
+- Missing or weak `state` parameter, enabling CSRF on the callback
+- Open redirect on the `redirect_uri`, leaking the access token to an attacker-controlled domain
+- Trusting the `email` claim from the provider without verifying it's verified
+
+OAuth is its own deep topic; this is the surface.
+
+## Burp flow
+
+1. Capture the login in Proxy.
+2. Send to Intruder.
+3. Mark username and/or password as payload positions.
+4. Wordlists: `xato-net-10-million-usernames.txt` for usernames, `rockyou.txt` for passwords, or the candidate lists the lab provides.
+5. Sort the result table by Length and Status. Outliers are hits.
+
+For 2FA brute force, the same flow but with the verification endpoint and a numeric payload generator (00000 to 99999).
+
+## Endpoints people forget to protect
+
+- Forgot-password flows often have weaker rate limits than the main login.
+- Mobile API endpoints sometimes skip the lockout the web login enforces.
+- Legacy endpoints (`/wp-login.php`, `/api/v1/login` after a v2 ships).
+- SSO callback handlers often skip CSRF and lockout checks.
+
+## Prevention
+
+- Strong password policy with a denylist of known-leaked passwords (HaveIBeenPwned API).
+- Rate limit per IP *and* per account, with exponential backoff.
+- Generic error messages: same response for "user not found" and "wrong password," same response time.
+- Mandatory MFA for admin accounts, optional for users.
+- Random, unguessable session tokens. Invalidate on logout, password change, and after a fixed timeout.
+- Reset tokens: cryptographically random, one-time use, short expiry, sent to the email tied to the account at creation. Don't trust the `Host` header.
+
+## My notes
+
+What I check first on any auth flow:
 
 - Login forms (obviously)
 - Forgot-password flows
 - MFA / 2FA flows
 - "Remember me" cookies
 - Account registration
+- Password change forms
+- SSO callback handlers
 - Anywhere a username might be confirmed or denied
 
-## Brute force
+If the app responds differently for valid vs invalid usernames, that's the foothold. Everything else is just iteration.
 
-Wordlists of usernames and passwords fired at the login. It works when:
+The fastest wins on real engagements have been: password reset poisoning via `Host` header, 2FA bypass by skipping the verify call, and "Remember me" cookies that decode to plaintext credentials.
 
-- No rate limit
-- No account lockout
-- No CAPTCHA after N failures
+## Labs
 
-My Burp flow:
+### Lab: Username enumeration via different responses
 
-1. Capture a login request in Proxy
-2. Send to Intruder
-3. Mark the username and/or password as payload positions
-4. SecLists wordlists: `xato-net-10-million-usernames.txt` for usernames, `rockyou.txt` for passwords
-5. Sort the result table by response length or status code. Successful logins almost always have a different length than failures
+**Apprentice · Solved**
 
-## Username enumeration
+[PortSwigger lab](https://portswigger.net/web-security/authentication/password-based/lab-username-enumeration-via-different-responses)
 
-When the app reveals whether a username exists by responding differently. Three places it usually leaks:
+Goal: find a valid username by spotting which login response differs from the rest, then crack the password the same way.
 
-- **Login** — "incorrect password" vs "user not found"
-- **Registration** — "username already taken"
-- **Forgot password** — "email sent" vs "no account with that email"
+1. Captured a login attempt in Proxy with a junk username and password, then sent it to Intruder.
+2. Marked the username field as the payload position and loaded the candidate-usernames wordlist from the lab.
+3. Ran the attack and sorted results by Length. Every wrong username returned the same length except one. That's the valid account.
+4. Repeated the same flow on the password field with the discovered username and the candidate-passwords list. Outlier response = correct password. Logged in to solve.
 
-Even when error text is identical, response time, status code, or content length can leak the same info. I sort the Intruder result column to spot outliers.
-
-## Smart password guessing
-
-Random brute force is slow. Patterns work better:
-
-- `Companyname2024!`, `Companyname1!`, `Welcome1!`
-- Season + year: `Spring2024!`, `Summer2024!`
-- Defaults from leaks (`rockyou.txt`)
-- `<firstname>123` for personal accounts
-- Reused passwords from breaches against the email (HaveIBeenPwned)
-
-When a password policy forces resets, users do `Mypassword1!` → `Mypassword2!`. Predictable.
-
-## Endpoints people forget to protect
-
-- Forgot-password flows often have weaker rate limits than login
-- Mobile API endpoints sometimes skip the lockout the web login enforces
-- Legacy endpoints (`/wp-login.php`, `/api/v1/login` after a v2 ships) get left around
-
-## Lab writeups
-
-Add links as I complete labs.
+**Takeaway:** the app didn't return different error *text*. Length alone gave it away. Always sort Intruder results by Length and Status before reading any individual response.

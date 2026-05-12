@@ -2,94 +2,133 @@
 
 > **PortSwigger topic:** https://portswigger.net/web-security/access-control
 
-## Cheat sheet
+## What is access control?
 
-Auth says who you are. Access control says what you can do. The latter is where bugs hide.
+The set of constraints on who or what is authorized to perform an action or access a resource. Access control depends on authentication (who you are), session management (which requests are yours), and the access decision itself.
 
-**Three flavors:**
+Broken access control sits in the OWASP Top 10 because it's policy work crossing business, organizational, and legal boundaries; humans get it wrong constantly.
 
-- Vertical privesc — user reaches admin functionality
-- Horizontal privesc — user A reaches user B's data (this is IDOR)
-- Horizontal → vertical — IDOR onto an admin account, game over
+PortSwigger groups access controls into three types:
 
-**Try these first:**
+- **Vertical:** restricts sensitive functionality to specific user types (admin can modify accounts, normal users can't).
+- **Horizontal:** restricts a resource to specific users (a banking app where users see only their own transactions).
+- **Context-dependent:** restricts access based on the application's state or the user's progress through a flow (e.g. preventing a user from modifying the cart contents after payment).
 
-- Forced browse: `/admin`, `/admin-panel`, `/manage`, `/dashboard`
-- ID swap: `?id=123` → `?id=456`, `/users/1` → `/users/2`
-- Cookie / hidden field tamper: `role=user` → `role=admin`, `admin=false` → `admin=true`
-- Check `robots.txt` and JS bundles for "secret" admin URLs
+## Vertical privilege escalation
 
-**In Burp:** swap a low-priv cookie into an admin request in Repeater. Use the [Autorize](https://portswigger.net/bappstore/f9bbac8c4acf4aefa4d7dc92a991af2f) extension for IDOR sweeps across every request.
+A normal user reaches functionality reserved for higher-privileged roles, usually admin pages or admin actions.
 
-## My version
+### Unprotected functionality
 
-Auth is "are you who you say you are." Access control is "are you allowed to do this." Different things. Apps get access control wrong constantly because the rules live in business logic and humans are bad at writing those by hand.
+Admin endpoints exist but aren't gated. `/admin` works for anyone who knows the URL. The URL might be:
 
-Two flavors:
+- Disclosed in `robots.txt`
+- Found by brute-forcing common paths with a wordlist
+- Obfuscated to a hard-to-guess URL (`/admin-panel-yb556`) but leaked in client-side JS that conditionally renders the admin link based on a role flag — the script runs for everyone
 
-- **Vertical privesc** — regular user reaches admin functionality
-- **Horizontal privesc** — user A reaches user B's data (this is IDOR)
-- **Horizontal → vertical** — IDOR onto an admin account is the chain that ends most engagements
+### Parameter-based access control
 
-## What to look for
-
-Anywhere the response would be different for a different user or role:
-
-- URLs with `/admin`, `/manage`, `/dashboard`
-- Numeric or guessable IDs: `?id=123`, `/users/42`, `/orders/777`
-- GUIDs in URLs (still might be leaked elsewhere, don't assume unguessable means safe)
-- Hidden form fields like `role=` or `admin=true`
-- Cookies that look role-related
-- Query params from old sessions that the backend still honors
-
-## Forced browsing
-
-Just try the admin URL.
-
-```
-https://target/admin
-https://target/admin-panel
-https://target/administrator-panel-yb556
-```
-
-Even when the URL is "secret," it tends to leak via:
-
-- `robots.txt`
-- JS bundles (menus rendered conditionally based on role often hardcode the URL)
-- HTTP comments
-- Page sources of users who DO have the permission
-
-## Parameter tampering
+The role lives in a hidden field, cookie, or URL parameter the user can edit:
 
 ```
 GET /home?admin=true
 GET /home?role=1
-GET /myaccount?id=456
+Cookie: role=admin
 ```
 
-If the access decision lives in a hidden field, cookie, or query param the user can edit, it's broken.
+Anything controlling access from a place the user can modify is broken.
 
-## IDOR
+### Platform misconfiguration
 
-Change the ID, see if the resource changes. If yes, the backend isn't checking ownership.
+Some apps enforce access at the platform layer (load balancer, reverse proxy) by matching URL paths or HTTP methods. Bypasses:
 
-When IDs are GUIDs and look unguessable, look for them leaking in:
+- Override headers the proxy honors but the app routes on:
+  ```
+  GET /home HTTP/1.1
+  X-Original-URL: /admin/deleteUser
+  ```
+- HTTP method tampering. If the proxy only blocks `POST /admin`, try `GET /admin` or `PUT /admin`. Some frameworks accept any method for the same endpoint.
 
-- User profile pages
-- Reviews / comments
-- Public APIs
-- Email links
-- WebSocket or SSE messages
+### URL-matching discrepancies
 
-## How I test it in Burp
+The proxy and the app interpret the same URL differently. Try variations:
 
-- Log in as a low-priv user, grab the session cookie
-- Find admin URLs (recon, JS analysis, dir brute force)
-- In Repeater, swap in the low-priv cookie, send the admin request
-- Read the response — 200 with content means bypass; 403/302 means enforced
+- **Capitalization:** `/admin` is blocked, but `/Admin` reaches the app due to case-insensitive routing.
+- **Trailing slash:** `/admin` is blocked, but `/admin/` is allowed by the proxy and routed to the same handler.
+- **File extension:** `/admin` is blocked, but `/admin.css` slips past, and Spring's `useSuffixPatternMatch` (deprecated but still common) routes it to the admin controller anyway.
 
-For IDOR specifically, the [Autorize](https://portswigger.net/bappstore/f9bbac8c4acf4aefa4d7dc92a991af2f) extension automates the cookie-swap flow across every request.
+## Horizontal privilege escalation
 
-## Lab writeups
+User accesses another user's resources of the same type. Classic IDOR pattern: change the ID, see if the resource changes.
 
-Add links as I complete labs.
+```
+GET /myaccount?id=123     (my account)
+GET /myaccount?id=124     (someone else's account, no auth check)
+```
+
+GUIDs make this harder but not impossible. They often leak in user mentions, reviews, comments, public profile pages, or WebSocket and SSE messages.
+
+This is the same family as **Insecure Direct Object References (IDOR)**: user-supplied input used directly to look up an object without an authorization check.
+
+## Horizontal becomes vertical
+
+A horizontal flaw used to compromise a privileged user. Reset an admin's password via `?id=adminUserId`, then log in as them. Most "high-impact IDOR" reports follow this pattern: find a horizontal bug, target it at a privileged account, get a vertical escalation.
+
+## Multi-step processes
+
+Wizard flows where step 1 sets up state and step 4 commits the action. The app checks access on step 1 but not on step 4.
+
+```
+Step 1: GET /admin/deleteUser           (blocked for non-admin)
+Step 4: POST /admin/deleteUser/confirm  (not blocked; assumes step 1 happened)
+```
+
+I always test the *last* step in a multi-step flow directly. The first step is usually the one with the check.
+
+## Referer-based access control
+
+The app trusts the `Referer` header to decide if a request came from an authorized page:
+
+```
+GET /admin/deleteUser
+Referer: https://target/admin
+```
+
+The browser sets `Referer` and the user controls the browser. Spoofing it bypasses the check entirely.
+
+## Location-based access control
+
+Apps that block requests from specific geographies (typically using IP geolocation) can be bypassed with:
+
+- Web proxies routed through the allowed region
+- VPN endpoints
+- Modified client-side geolocation (browser dev tools let you fake `navigator.geolocation`)
+
+## Prevention
+
+PortSwigger lists five principles:
+
+- Never rely on obfuscation alone.
+- Deny by default, except for resources intended to be publicly accessible.
+- Use a single application-wide access control mechanism.
+- Force developers to declare access for each resource; default to deny.
+- Audit and test access controls thoroughly.
+
+## My notes
+
+Workflow when I land on an authenticated page:
+
+1. Note the role I logged in as.
+2. Map every action available in the UI.
+3. Try those actions as a different role (or no role at all).
+4. Try those actions on someone else's resource (swap the IDs).
+5. Read the JS bundles for references to admin URLs or role flags.
+6. Test the *last* step of any multi-step flow directly.
+
+Cookies, hidden fields, and URL params controlling access are all the same bug. Never trust client-side state for authorization.
+
+In Burp: log in as low-priv, grab the session cookie, then swap it into a known admin request in Repeater. 200 with real content means bypass. 403 or 302 means the check is enforced server-side. The [Autorize](https://portswigger.net/bappstore/f9bbac8c4acf4aefa4d7dc92a991af2f) extension automates this across every request.
+
+## Labs
+
+No writeups yet.
